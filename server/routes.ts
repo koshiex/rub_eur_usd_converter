@@ -142,7 +142,7 @@ async function getBnbRate(): Promise<RateItem> {
   }
 }
 
-async function getVisaRate(): Promise<RateItem> {
+async function tryVisaOfficial(): Promise<RateItem | null> {
   const today = new Date();
   const mm = String(today.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(today.getUTCDate()).padStart(2, "0");
@@ -169,7 +169,7 @@ async function getVisaRate(): Promise<RateItem> {
           pair: "EUR → USD",
           rate,
           label: "1 EUR в USD",
-          source: "Visa FX calculator API",
+          source: "Visa FX calculator API (usa.visa.com/cmsapi)",
           url,
           updatedAt: `${mm}/${dd}/${yyyy}`,
           status: "live",
@@ -177,37 +177,110 @@ async function getVisaRate(): Promise<RateItem> {
         };
       }
     } catch {
-      // Visa blocks some server-side requests; fall through to the public mirror below.
+      // Visa cmsapi blocks many server-side requests; fall through to the public mirror below.
     }
   }
+  return null;
+}
 
-  const url = "https://ferates.com/visa";
+function parseFeratesVisaRow(text: string): { date?: string; bid?: number; ask?: number } | null {
+  const match = text.match(
+    /EUR\s*euro\s*(\d{2}\/\d{2}\/\d{4})\s*([0-9]+[.,][0-9]+)(?:\s*[-+]?[0-9]+[.,][0-9]+)?\s*([0-9]+[.,][0-9]+)/i,
+  );
+  if (!match) return null;
+  const bid = Number(match[2].replace(",", "."));
+  const ask = Number(match[3].replace(",", "."));
+  if (!Number.isFinite(bid) || !Number.isFinite(ask)) return null;
+  return { date: match[1], bid, ask };
+}
+
+async function tryFeratesAjax(): Promise<RateItem | null> {
+  const url = "https://new.ferates.com/ajax/cards/ratesTable?type=visa&currency=";
+  try {
+    const ajaxHeaders = {
+      ...headers,
+      "X-Requested-With": "XMLHttpRequest",
+      Referer: "https://new.ferates.com/cards",
+    };
+    const response = await fetch(url, { headers: ajaxHeaders });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    const data = (await response.json()) as { view?: string };
+    if (!data?.view) throw new Error("ferates ajax response missing view");
+    const text = stripTags(data.view);
+    const parsed = parseFeratesVisaRow(text);
+    if (!parsed || !parsed.ask) throw new Error("Visa EUR row not found in ferates ajax");
+    return {
+      pair: "EUR → USD",
+      rate: parsed.ask,
+      label: "1 EUR в USD",
+      source: "new.ferates.com, таблица Visa exchange rates (ask/sale)",
+      url: "https://new.ferates.com/cards",
+      updatedAt: parsed.date,
+      status: "live",
+      note: `Официальный endpoint Visa блокирует серверные запросы, поэтому используется публичная таблица Visa rates с new.ferates.com. Взят курс ask (sale) — им Visa рассчитывает EUR → USD при списании с карты; bid для справки: ${parsed.bid?.toFixed(4)}.`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function tryFeratesPage(): Promise<RateItem | null> {
+  const url = "https://new.ferates.com/cards";
   try {
     const html = await fetchText(url);
     const text = stripTags(html);
-    const eurMatch = text.match(/EUR\s+euro\s+([0-9/.\-]+)\s+([0-9]+[.,][0-9]+)/i);
-    if (!eurMatch) throw new Error("Visa EUR row not found");
+    const parsed = parseFeratesVisaRow(text);
+    if (!parsed || !parsed.ask) return null;
     return {
       pair: "EUR → USD",
-      rate: Number(eurMatch[2].replace(",", ".")),
+      rate: parsed.ask,
       label: "1 EUR в USD",
-      source: "ferates.com, таблица курсов Visa",
+      source: "new.ferates.com/cards, таблица Visa exchange rates (ask/sale)",
       url,
-      updatedAt: eurMatch[1],
+      updatedAt: parsed.date,
       status: "live",
-      note: "Официальный endpoint Visa недоступен серверу, поэтому используется публичная таблица Visa rates.",
+      note: `Официальный endpoint Visa блокирует серверные запросы, поэтому используется публичная таблица Visa rates со страницы new.ferates.com/cards. Взят курс ask (sale); bid для справки: ${parsed.bid?.toFixed(4)}.`,
     };
-  } catch (error) {
-    return {
-      pair: "EUR → USD",
-      rate: FALLBACKS.visaEurToUsd,
-      label: "1 EUR в USD",
-      source: "fallback",
-      url: "https://usa.visa.com/support/consumer/travel-support/exchange-rate-calculator.html",
-      status: "fallback",
-      note: `Не удалось обновить курс Visa: ${String(error)}. Используется последнее известное значение.`,
-    };
+  } catch {
+    return null;
   }
+}
+
+async function getVisaRate(): Promise<RateItem> {
+  const errors: string[] = [];
+  try {
+    const official = await tryVisaOfficial();
+    if (official) return official;
+    errors.push("Visa cmsapi: нет валидного ответа");
+  } catch (error) {
+    errors.push(`Visa cmsapi: ${String(error)}`);
+  }
+
+  try {
+    const ajax = await tryFeratesAjax();
+    if (ajax) return ajax;
+    errors.push("new.ferates.com ajax: EUR не найден");
+  } catch (error) {
+    errors.push(`new.ferates.com ajax: ${String(error)}`);
+  }
+
+  try {
+    const page = await tryFeratesPage();
+    if (page) return page;
+    errors.push("new.ferates.com/cards: EUR не найден");
+  } catch (error) {
+    errors.push(`new.ferates.com/cards: ${String(error)}`);
+  }
+
+  return {
+    pair: "EUR → USD",
+    rate: FALLBACKS.visaEurToUsd,
+    label: "1 EUR в USD",
+    source: "fallback",
+    url: "https://usa.visa.com/support/consumer/travel-support/exchange-rate-calculator.html",
+    status: "fallback",
+    note: `Не удалось обновить курс Visa (${errors.join("; ")}). Используется последнее известное значение.`,
+  };
 }
 
 export async function registerRoutes(

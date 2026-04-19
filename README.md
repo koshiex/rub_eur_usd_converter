@@ -92,7 +92,7 @@ rubNeeded     = bynNeeded / mirRubToByn
 
 - **RUB → BYN (МИР):** курс платёжной системы МИР, получаемый с сайта [onlymir.ru](https://onlymir.ru) / открытых данных МИР.
 - **BYN → EUR (БНБ-Банк):** курсы БНБ-Банка ([bnb.by](https://bnb.by), `imbank`/счёт), используются курсы **счёта/аккаунта**, а не карточные курсы.
-- **EUR → USD (Visa):** попытка получения курса через Visa FX Calculator / Visa FX API. При недоступности API используется резервный (fallback) курс; в интерфейсе отображается статус источника курса.
+- **EUR → USD (Visa):** сначала делается попытка получить курс через официальный Visa FX Calculator / Visa FX API (`usa.visa.com/cmsapi/fx/rates`). Этот endpoint обычно блокирует серверные запросы (Akamai / WAF), поэтому основным источником выступает публичная таблица Visa exchange rates на [new.ferates.com/cards](https://new.ferates.com/cards) (AJAX endpoint `ajax/cards/ratesTable?type=visa`). Из EUR-строки берётся курс **ask (sale)** — именно по нему Visa конвертирует EUR → USD при списании с карты. При недоступности всех источников используется резервный (fallback) курс; в интерфейсе отображается статус источника курса.
 
 ## Настройки комиссии Pyypl
 

@@ -1,5 +1,5 @@
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { ArrowDown, Calculator, CreditCard, Moon, RefreshCw, Settings2, ShoppingCart, Sun, WalletCards } from "lucide-react";
+import { ArrowDown, ArrowUp, Calculator, CreditCard, Moon, RefreshCw, Settings2, ShoppingCart, Sun, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Route, Router, Switch } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
@@ -131,6 +131,9 @@ function Home() {
   const [pyyplPercent, setPyyplPercent] = useState(3.5);
   const [pyyplCardFixed, setPyyplCardFixed] = useState(0);
   const [pyyplCardPercent, setPyyplCardPercent] = useState(5);
+  const [targetEurBnb, setTargetEurBnb] = useState(100);
+  const [targetUsdPyypl, setTargetUsdPyypl] = useState(100);
+  const [targetEurPyypl, setTargetEurPyypl] = useState(100);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<RatesResponse>({
     queryKey: ["/api/rates"],
@@ -168,6 +171,69 @@ function Home() {
       eurFinal,
     };
   }, [data, pyyplFixed, pyyplPercent, pyyplCardFixed, pyyplCardPercent, rub]);
+
+  const reverse = useMemo(() => {
+    const mir = data?.rates.mirRubToByn.rate ?? 0;
+    const bnb = data?.rates.bnbBynPerEur.rate ?? 0;
+    const visa = data?.rates.visaEurToUsd.rate ?? 0;
+    const ratesOk = mir > 0 && bnb > 0 && visa > 0;
+    const topUpFactor = 1 - pyyplPercent / 100;
+    const cardFactor = 1 - pyyplCardPercent / 100;
+
+    // Сценарий 1 reverse: платим N EUR с BNB → RUB → BYN → EUR
+    const s1BynNeeded = targetEurBnb * bnb;
+    const s1RubNeeded = mir > 0 ? s1BynNeeded / mir : 0;
+
+    // Сценарий 2 reverse: хотим иметь N USD на Pyypl после комиссии top up
+    const s2UsdBeforeFee = topUpFactor > 0 ? (targetUsdPyypl + pyyplFixed) / topUpFactor : 0;
+    const s2EurNeeded = visa > 0 ? s2UsdBeforeFee / visa : 0;
+    const s2BynNeeded = s2EurNeeded * bnb;
+    const s2RubNeeded = mir > 0 ? s2BynNeeded / mir : 0;
+    const s2MinTopUpOk = s2UsdBeforeFee >= 20;
+    const s2UsdForMinTopUp = 20;
+    const s2EurForMinTopUp = visa > 0 ? s2UsdForMinTopUp / visa : 0;
+    const s2BynForMinTopUp = s2EurForMinTopUp * bnb;
+    const s2RubForMinTopUp = mir > 0 ? s2BynForMinTopUp / mir : 0;
+    const s2PyyplFee = s2UsdBeforeFee - targetUsdPyypl;
+
+    // Сценарий 3 reverse: хотим покупку N EUR через Pyypl USD (USD→EUR по инверсии Visa, card fee, затем top-up fee)
+    const s3UsdForFx = targetEurPyypl * visa;
+    const s3UsdAfterTopup = cardFactor > 0 ? (s3UsdForFx + pyyplCardFixed) / cardFactor : 0;
+    const s3UsdBeforeTopup = topUpFactor > 0 ? (s3UsdAfterTopup + pyyplFixed) / topUpFactor : 0;
+    const s3EurNeeded = visa > 0 ? s3UsdBeforeTopup / visa : 0;
+    const s3BynNeeded = s3EurNeeded * bnb;
+    const s3RubNeeded = mir > 0 ? s3BynNeeded / mir : 0;
+    const s3MinTopUpOk = s3UsdBeforeTopup >= 20;
+    const s3PyyplTopUpFee = s3UsdBeforeTopup - s3UsdAfterTopup;
+    const s3PyyplCardFee = s3UsdAfterTopup - s3UsdForFx;
+    const s3UsdToEurRate = visa > 0 ? 1 / visa : 0;
+
+    return {
+      ratesOk,
+      s1: { bynNeeded: s1BynNeeded, rubNeeded: s1RubNeeded },
+      s2: {
+        usdBeforeFee: s2UsdBeforeFee,
+        eurNeeded: s2EurNeeded,
+        bynNeeded: s2BynNeeded,
+        rubNeeded: s2RubNeeded,
+        minTopUpOk: s2MinTopUpOk,
+        rubForMinTopUp: s2RubForMinTopUp,
+        pyyplFee: s2PyyplFee,
+      },
+      s3: {
+        usdForFx: s3UsdForFx,
+        usdAfterTopup: s3UsdAfterTopup,
+        usdBeforeTopup: s3UsdBeforeTopup,
+        eurNeeded: s3EurNeeded,
+        bynNeeded: s3BynNeeded,
+        rubNeeded: s3RubNeeded,
+        minTopUpOk: s3MinTopUpOk,
+        pyyplTopUpFee: s3PyyplTopUpFee,
+        pyyplCardFee: s3PyyplCardFee,
+        usdToEurRate: s3UsdToEurRate,
+      },
+    };
+  }, [data, pyyplFixed, pyyplPercent, pyyplCardFixed, pyyplCardPercent, targetEurBnb, targetUsdPyypl, targetEurPyypl]);
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -426,6 +492,205 @@ function Home() {
                 value={fmt(calc.eurFinal, "EUR")}
                 detail={`${fmt(calc.usdAvailableForFx, "USD")} × ${num(calc.usdToEurRate, 6)} (= 1 / ${num(data?.rates.visaEurToUsd.rate ?? 0, 6)})`}
               />
+            </CardContent>
+          </Card>
+
+          <Card className="border-card-border" data-testid="card-reverse">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <ArrowUp className="h-5 w-5 text-primary" />
+                <CardTitle className="text-lg">Обратный расчёт: сколько RUB нужно</CardTitle>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Введите целевую сумму покупки и получите стартовую сумму в RUB для каждого из трёх сценариев. Курсы и комиссии берутся из настроек выше.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {!reverse.ratesOk && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="status-reverse-rates">
+                  Не хватает курсов для обратного расчёта. Обновите курсы.
+                </div>
+              )}
+
+              <div className="space-y-3" data-testid="block-reverse-s1">
+                <div className="flex items-center gap-2">
+                  <WalletCards className="h-4 w-4 text-primary" />
+                  <div className="text-sm font-semibold">Сценарий 1: покупка в EUR с карты/счёта BNB</div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reverse-s1-eur">Сумма покупки, EUR</Label>
+                  <Input
+                    id="reverse-s1-eur"
+                    inputMode="decimal"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={targetEurBnb}
+                    onChange={(event) => setTargetEurBnb(Number(event.target.value || 0))}
+                    className="h-11 font-mono"
+                    data-testid="input-reverse-s1-eur"
+                  />
+                </div>
+                <StepRow
+                  title="Нужно BYN на БНБ"
+                  value={fmt(reverse.s1.bynNeeded, "BYN")}
+                  detail={`${fmt(targetEurBnb, "EUR")} × ${num(data?.rates.bnbBynPerEur.rate ?? 0, 4)} BYN за 1 EUR`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <div className="rounded-xl bg-primary p-5 text-primary-foreground">
+                  <div className="text-sm opacity-80">Нужно RUB на старте</div>
+                  <div className="mt-2 font-mono text-3xl font-bold tabular-nums" data-testid="text-reverse-s1-rub">
+                    {fmt(reverse.s1.rubNeeded, "RUB", 0)}
+                  </div>
+                  <div className="mt-2 text-xs opacity-80">
+                    {fmt(reverse.s1.bynNeeded, "BYN")} / {num(data?.rates.mirRubToByn.rate ?? 0, 6)} (BYN за 1 RUB)
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3" data-testid="block-reverse-s2">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-primary" />
+                  <div className="text-sm font-semibold">Сценарий 2: нужно N USD на Pyypl после комиссии top up</div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reverse-s2-usd">Нужно USD на Pyypl</Label>
+                  <Input
+                    id="reverse-s2-usd"
+                    inputMode="decimal"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={targetUsdPyypl}
+                    onChange={(event) => setTargetUsdPyypl(Number(event.target.value || 0))}
+                    className="h-11 font-mono"
+                    data-testid="input-reverse-s2-usd"
+                  />
+                </div>
+                <StepRow
+                  title="USD до комиссии top up"
+                  value={fmt(reverse.s2.usdBeforeFee, "USD")}
+                  detail={`(${fmt(targetUsdPyypl, "USD")} + ${fmt(pyyplFixed, "USD")}) / (1 − ${pyyplPercent}%)`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <StepRow
+                  title="Pyypl top up fee"
+                  value={`+${fmt(reverse.s2.pyyplFee, "USD")}`}
+                  detail={`${pyyplPercent}% + ${fmt(pyyplFixed, "USD")}`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <StepRow
+                  title="Нужно EUR на счёте БНБ"
+                  value={fmt(reverse.s2.eurNeeded, "EUR")}
+                  detail={`${fmt(reverse.s2.usdBeforeFee, "USD")} / ${num(data?.rates.visaEurToUsd.rate ?? 0, 6)} (Visa EUR→USD)`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <StepRow
+                  title="Нужно BYN на БНБ"
+                  value={fmt(reverse.s2.bynNeeded, "BYN")}
+                  detail={`${fmt(reverse.s2.eurNeeded, "EUR")} × ${num(data?.rates.bnbBynPerEur.rate ?? 0, 4)}`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <div className="rounded-xl bg-primary p-5 text-primary-foreground">
+                  <div className="text-sm opacity-80">Нужно RUB на старте</div>
+                  <div className="mt-2 font-mono text-3xl font-bold tabular-nums" data-testid="text-reverse-s2-rub">
+                    {fmt(reverse.s2.rubNeeded, "RUB", 0)}
+                  </div>
+                </div>
+                <div
+                  className={`rounded-lg p-3 text-sm ${
+                    reverse.s2.minTopUpOk ? "bg-primary/10 text-foreground" : "bg-destructive/10 text-destructive"
+                  }`}
+                  data-testid="status-reverse-s2-min"
+                >
+                  {reverse.s2.minTopUpOk
+                    ? `Минимум Pyypl 20 USD до комиссии выполнен (${fmt(reverse.s2.usdBeforeFee, "USD")}).`
+                    : `Минимум Pyypl 20 USD до комиссии не достигнут. Нужно минимум ${fmt(reverse.s2.rubForMinTopUp, "RUB", 0)} на старте, чтобы пополнить Pyypl.`}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3" data-testid="block-reverse-s3">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="h-4 w-4 text-primary" />
+                  <div className="text-sm font-semibold">Сценарий 3: покупка в EUR с Pyypl USD</div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reverse-s3-eur">Сумма покупки, EUR</Label>
+                  <Input
+                    id="reverse-s3-eur"
+                    inputMode="decimal"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={targetEurPyypl}
+                    onChange={(event) => setTargetEurPyypl(Number(event.target.value || 0))}
+                    className="h-11 font-mono"
+                    data-testid="input-reverse-s3-eur"
+                  />
+                </div>
+                <StepRow
+                  title="USD для FX (покупка)"
+                  value={fmt(reverse.s3.usdForFx, "USD")}
+                  detail={`${fmt(targetEurPyypl, "EUR")} × ${num(data?.rates.visaEurToUsd.rate ?? 0, 6)} (инверсия: 1 EUR = Visa USD)`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <StepRow
+                  title="USD на Pyypl после top up"
+                  value={fmt(reverse.s3.usdAfterTopup, "USD")}
+                  detail={`(${fmt(reverse.s3.usdForFx, "USD")} + ${fmt(pyyplCardFixed, "USD")}) / (1 − ${pyyplCardPercent}%)`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <StepRow
+                  title="Pyypl card transaction fee"
+                  value={`+${fmt(reverse.s3.pyyplCardFee, "USD")}`}
+                  detail={`${pyyplCardPercent}% + ${fmt(pyyplCardFixed, "USD")}`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <StepRow
+                  title="USD до комиссии top up"
+                  value={fmt(reverse.s3.usdBeforeTopup, "USD")}
+                  detail={`(${fmt(reverse.s3.usdAfterTopup, "USD")} + ${fmt(pyyplFixed, "USD")}) / (1 − ${pyyplPercent}%)`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <StepRow
+                  title="Pyypl top up fee"
+                  value={`+${fmt(reverse.s3.pyyplTopUpFee, "USD")}`}
+                  detail={`${pyyplPercent}% + ${fmt(pyyplFixed, "USD")}`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <StepRow
+                  title="Нужно EUR на счёте БНБ"
+                  value={fmt(reverse.s3.eurNeeded, "EUR")}
+                  detail={`${fmt(reverse.s3.usdBeforeTopup, "USD")} / ${num(data?.rates.visaEurToUsd.rate ?? 0, 6)}`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <StepRow
+                  title="Нужно BYN на БНБ"
+                  value={fmt(reverse.s3.bynNeeded, "BYN")}
+                  detail={`${fmt(reverse.s3.eurNeeded, "EUR")} × ${num(data?.rates.bnbBynPerEur.rate ?? 0, 4)}`}
+                />
+                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                <div className="rounded-xl bg-primary p-5 text-primary-foreground">
+                  <div className="text-sm opacity-80">Нужно RUB на старте</div>
+                  <div className="mt-2 font-mono text-3xl font-bold tabular-nums" data-testid="text-reverse-s3-rub">
+                    {fmt(reverse.s3.rubNeeded, "RUB", 0)}
+                  </div>
+                </div>
+                <div
+                  className={`rounded-lg p-3 text-sm ${
+                    reverse.s3.minTopUpOk ? "bg-primary/10 text-foreground" : "bg-destructive/10 text-destructive"
+                  }`}
+                  data-testid="status-reverse-s3-min"
+                >
+                  {reverse.s3.minTopUpOk
+                    ? `Минимум Pyypl 20 USD до комиссии top up выполнен (${fmt(reverse.s3.usdBeforeTopup, "USD")}).`
+                    : `Минимум Pyypl 20 USD до комиссии top up не достигнут. Увеличьте сумму покупки или пополните Pyypl отдельно.`}
+                </div>
+              </div>
             </CardContent>
           </Card>
 

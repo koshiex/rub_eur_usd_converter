@@ -43,6 +43,51 @@
 - USD, доступные для FX после комиссии;
 - итоговая сумма EUR-транзакции.
 
+## Обратный расчёт: сколько RUB нужно на старте
+
+В интерфейсе ниже прямых сценариев есть блок **«Обратный расчёт: сколько RUB нужно»**. Он отвечает на обратный вопрос: «Сколько нужно положить на старте RUB, чтобы оплатить покупку на заданную сумму?». Реализованы три обратных сценария, симметричных прямым.
+
+Обозначения:
+
+- `mirRubToByn` — сколько BYN получит пользователь за 1 RUB по курсу МИР.
+- `bnbBynPerEur` — сколько BYN стоит 1 EUR по курсу БНБ (счёт).
+- `visaEurToUsd` — сколько USD дают за 1 EUR по курсу Visa.
+- `topUpFixed`, `topUpPercent` — комиссия Pyypl за top up (USD, %).
+- `cardFixed`, `cardPercent` — комиссия Pyypl за card transaction (USD, %).
+
+### Обратный Сценарий 1: нужно `N EUR` на счёте/карте BNB
+
+```
+bynNeeded = N_EUR × bnbBynPerEur
+rubNeeded = bynNeeded / mirRubToByn
+```
+
+### Обратный Сценарий 2: нужно `N USD` на Pyypl после top up
+
+```
+usdBeforeFee = (N_USD + topUpFixed) / (1 − topUpPercent/100)
+eurNeeded    = usdBeforeFee / visaEurToUsd
+bynNeeded    = eurNeeded × bnbBynPerEur
+rubNeeded    = bynNeeded / mirRubToByn
+```
+
+Минимум Pyypl по top up — **20 USD до комиссии**: если `usdBeforeFee < 20`, интерфейс показывает предупреждение и минимально необходимую сумму в RUB, чтобы пополнение было в принципе возможно.
+
+### Обратный Сценарий 3: покупка `N EUR` с Pyypl USD
+
+Инверсия цепочки «EUR BNB → USD Pyypl (top up fee) → USD после card transaction fee → EUR (инверсия Visa)».
+
+```
+usdForFx      = N_EUR × visaEurToUsd               // USD, который уйдёт на FX-покупку
+usdAfterTopup = (usdForFx + cardFixed) / (1 − cardPercent/100)
+usdBeforeTopup = (usdAfterTopup + topUpFixed) / (1 − topUpPercent/100)
+eurNeeded     = usdBeforeTopup / visaEurToUsd
+bynNeeded     = eurNeeded × bnbBynPerEur
+rubNeeded     = bynNeeded / mirRubToByn
+```
+
+Также проверяется, что `usdBeforeTopup ≥ 20` (минимум top up Pyypl). Если курс какого-либо звена равен нулю или отсутствует, блок показывает предупреждение об отсутствии курсов; в расчётах используется безопасное деление, чтобы не появлялись `Infinity`/`NaN`.
+
 ## Источники курсов
 
 - **RUB → BYN (МИР):** курс платёжной системы МИР, получаемый с сайта [onlymir.ru](https://onlymir.ru) / открытых данных МИР.

@@ -241,7 +241,7 @@ function Home() {
         Перейти к калькулятору
       </a>
       <header className="border-b border-border/70 bg-background/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
           <Logo />
           <Button
             variant="outline"
@@ -255,9 +255,9 @@ function Home() {
         </div>
       </header>
 
-      <section id="content" className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="space-y-6">
-          <Card className="overflow-hidden border-card-border">
+      <section id="content" className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6">
+        <div className="grid gap-6 lg:grid-cols-12">
+          <Card className="overflow-hidden border-card-border lg:col-span-7 xl:col-span-8">
             <CardHeader>
               <div className="flex items-start gap-3">
                 <div className="rounded-lg bg-primary/10 p-2 text-primary">
@@ -367,13 +367,13 @@ function Home() {
             </CardContent>
           </Card>
 
-          <Card className="border-card-border">
+          <Card className="border-card-border lg:col-span-5 xl:col-span-4">
             <CardHeader>
               <CardTitle className="text-lg">Курсы и источники</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
                   <Skeleton className="h-24" />
                   <Skeleton className="h-24" />
                   <Skeleton className="h-24" />
@@ -383,10 +383,12 @@ function Home() {
                   Не удалось загрузить курсы. Попробуй обновить позже.
                 </div>
               ) : (
-                <div className="grid gap-3">
-                  <RatePill item={data.rates.mirRubToByn} />
-                  <RatePill item={data.rates.bnbBynPerEur} />
-                  <RatePill item={data.rates.visaEurToUsd} />
+                <div className="space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                    <RatePill item={data.rates.mirRubToByn} />
+                    <RatePill item={data.rates.bnbBynPerEur} />
+                    <RatePill item={data.rates.visaEurToUsd} />
+                  </div>
                   <p className="text-xs text-muted-foreground" data-testid="text-fetched-at">
                     Сервер обновил данные: {new Date(data.fetchedAt).toLocaleString("ru-RU")}
                   </p>
@@ -396,7 +398,15 @@ function Home() {
           </Card>
         </div>
 
-        <div className="space-y-6">
+        <section aria-labelledby="forward-heading" className="space-y-4" data-testid="section-forward">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 id="forward-heading" className="text-xl font-semibold tracking-tight">Прямой расчёт</h2>
+              <p className="text-sm text-muted-foreground">От стартовой суммы RUB к итогу в EUR/USD по трём маршрутам.</p>
+            </div>
+            <Badge variant="secondary" className="hidden sm:inline-flex">RUB → EUR / USD</Badge>
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
           <Card className="border-card-border">
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -494,67 +504,73 @@ function Home() {
               />
             </CardContent>
           </Card>
+          </div>
+        </section>
 
-          <Card className="border-card-border" data-testid="card-reverse">
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <ArrowUp className="h-5 w-5 text-primary" />
-                <CardTitle className="text-lg">Обратный расчёт: сколько RUB нужно</CardTitle>
-              </div>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Введите целевую сумму покупки и получите стартовую сумму в RUB для каждого из трёх сценариев. Курсы и комиссии берутся из настроек выше.
+        <section aria-labelledby="reverse-heading" className="space-y-4" data-testid="section-reverse">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 id="reverse-heading" className="text-xl font-semibold tracking-tight">Обратный расчёт</h2>
+              <p className="text-sm text-muted-foreground">
+                Введите целевую сумму покупки — получите стартовую сумму в RUB. Курсы и комиссии берутся из настроек выше.
               </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {!reverse.ratesOk && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="status-reverse-rates">
-                  Не хватает курсов для обратного расчёта. Обновите курсы.
-                </div>
-              )}
-
-              <div className="space-y-3" data-testid="block-reverse-s1">
-                <div className="flex items-center gap-2">
-                  <WalletCards className="h-4 w-4 text-primary" />
-                  <div className="text-sm font-semibold">Сценарий 1: покупка в EUR с карты/счёта BNB</div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reverse-s1-eur">Сумма покупки, EUR</Label>
-                  <Input
-                    id="reverse-s1-eur"
-                    inputMode="decimal"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={targetEurBnb}
-                    onChange={(event) => setTargetEurBnb(Number(event.target.value || 0))}
-                    className="h-11 font-mono"
-                    data-testid="input-reverse-s1-eur"
+            </div>
+            <Badge variant="secondary" className="hidden sm:inline-flex">EUR / USD → RUB</Badge>
+          </div>
+          {!reverse.ratesOk && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" data-testid="status-reverse-rates">
+              Не хватает курсов для обратного расчёта. Обновите курсы.
+            </div>
+          )}
+          <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3" data-testid="card-reverse">
+              <Card className="border-card-border" data-testid="block-reverse-s1">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <WalletCards className="h-5 w-5 text-primary" />
+                    <CardTitle className="text-lg">Сценарий 1: покупка в EUR с BNB</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="reverse-s1-eur">Сумма покупки, EUR</Label>
+                    <Input
+                      id="reverse-s1-eur"
+                      inputMode="decimal"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={targetEurBnb}
+                      onChange={(event) => setTargetEurBnb(Number(event.target.value || 0))}
+                      className="h-11 font-mono"
+                      data-testid="input-reverse-s1-eur"
+                    />
+                  </div>
+                  <StepRow
+                    title="Нужно BYN на БНБ"
+                    value={fmt(reverse.s1.bynNeeded, "BYN")}
+                    detail={`${fmt(targetEurBnb, "EUR")} × ${num(data?.rates.bnbBynPerEur.rate ?? 0, 4)} BYN за 1 EUR`}
                   />
-                </div>
-                <StepRow
-                  title="Нужно BYN на БНБ"
-                  value={fmt(reverse.s1.bynNeeded, "BYN")}
-                  detail={`${fmt(targetEurBnb, "EUR")} × ${num(data?.rates.bnbBynPerEur.rate ?? 0, 4)} BYN за 1 EUR`}
-                />
-                <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
-                <div className="rounded-xl bg-primary p-5 text-primary-foreground">
-                  <div className="text-sm opacity-80">Нужно RUB на старте</div>
-                  <div className="mt-2 font-mono text-3xl font-bold tabular-nums" data-testid="text-reverse-s1-rub">
-                    {fmt(reverse.s1.rubNeeded, "RUB", 0)}
+                  <ArrowUp className="mx-auto h-4 w-4 text-muted-foreground" />
+                  <div className="rounded-xl bg-primary p-5 text-primary-foreground">
+                    <div className="text-sm opacity-80">Нужно RUB на старте</div>
+                    <div className="mt-2 font-mono text-3xl font-bold tabular-nums" data-testid="text-reverse-s1-rub">
+                      {fmt(reverse.s1.rubNeeded, "RUB", 0)}
+                    </div>
+                    <div className="mt-2 text-xs opacity-80">
+                      {fmt(reverse.s1.bynNeeded, "BYN")} / {num(data?.rates.mirRubToByn.rate ?? 0, 6)} (BYN за 1 RUB)
+                    </div>
                   </div>
-                  <div className="mt-2 text-xs opacity-80">
-                    {fmt(reverse.s1.bynNeeded, "BYN")} / {num(data?.rates.mirRubToByn.rate ?? 0, 6)} (BYN за 1 RUB)
+                </CardContent>
+              </Card>
+
+              <Card className="border-card-border" data-testid="block-reverse-s2">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <CreditCard className="h-5 w-5 text-primary" />
+                    <CardTitle className="text-lg">Сценарий 2: нужно N USD на Pyypl</CardTitle>
                   </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3" data-testid="block-reverse-s2">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-primary" />
-                  <div className="text-sm font-semibold">Сценарий 2: нужно N USD на Pyypl после комиссии top up</div>
-                </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
                 <div className="space-y-2">
                   <Label htmlFor="reverse-s2-usd">Нужно USD на Pyypl</Label>
                   <Input
@@ -609,15 +625,17 @@ function Home() {
                     ? `Минимум Pyypl 20 USD до комиссии выполнен (${fmt(reverse.s2.usdBeforeFee, "USD")}).`
                     : `Минимум Pyypl 20 USD до комиссии не достигнут. Нужно минимум ${fmt(reverse.s2.rubForMinTopUp, "RUB", 0)} на старте, чтобы пополнить Pyypl.`}
                 </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              <Separator />
-
-              <div className="space-y-3" data-testid="block-reverse-s3">
-                <div className="flex items-center gap-2">
-                  <ShoppingCart className="h-4 w-4 text-primary" />
-                  <div className="text-sm font-semibold">Сценарий 3: покупка в EUR с Pyypl USD</div>
-                </div>
+              <Card className="border-card-border" data-testid="block-reverse-s3">
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <ShoppingCart className="h-5 w-5 text-primary" />
+                    <CardTitle className="text-lg">Сценарий 3: покупка в EUR с Pyypl USD</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
                 <div className="space-y-2">
                   <Label htmlFor="reverse-s3-eur">Сумма покупки, EUR</Label>
                   <Input
@@ -690,9 +708,10 @@ function Home() {
                     ? `Минимум Pyypl 20 USD до комиссии top up выполнен (${fmt(reverse.s3.usdBeforeTopup, "USD")}).`
                     : `Минимум Pyypl 20 USD до комиссии top up не достигнут. Увеличьте сумму покупки или пополните Pyypl отдельно.`}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+          </div>
+        </section>
 
           {data && (
             <Card className="border-card-border">
@@ -708,7 +727,6 @@ function Home() {
               </CardContent>
             </Card>
           )}
-        </div>
       </section>
     </main>
   );

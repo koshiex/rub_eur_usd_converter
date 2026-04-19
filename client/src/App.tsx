@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { queryClient } from "./lib/queryClient";
@@ -398,6 +399,12 @@ function Home() {
           </Card>
         </div>
 
+        <Tabs defaultValue="forward" className="space-y-6" data-testid="tabs-direction">
+          <TabsList className="grid h-auto w-full grid-cols-2 sm:w-auto sm:inline-flex" data-testid="tabs-direction-list">
+            <TabsTrigger value="forward" className="py-2" data-testid="tab-trigger-forward">Из рублей</TabsTrigger>
+            <TabsTrigger value="reverse" className="py-2" data-testid="tab-trigger-reverse">В рубли</TabsTrigger>
+          </TabsList>
+          <TabsContent value="forward" className="mt-0" data-testid="tab-panel-forward">
         <section aria-labelledby="forward-heading" className="space-y-4" data-testid="section-forward">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -506,7 +513,8 @@ function Home() {
           </Card>
           </div>
         </section>
-
+          </TabsContent>
+          <TabsContent value="reverse" className="mt-0" data-testid="tab-panel-reverse">
         <section aria-labelledby="reverse-heading" className="space-y-4" data-testid="section-reverse">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -712,6 +720,8 @@ function Home() {
               </Card>
           </div>
         </section>
+          </TabsContent>
+        </Tabs>
 
           {data && (
             <Card className="border-card-border">

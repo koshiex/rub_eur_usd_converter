@@ -1,5 +1,5 @@
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { ArrowDown, Calculator, CreditCard, Moon, RefreshCw, Settings2, Sun, WalletCards } from "lucide-react";
+import { ArrowDown, Calculator, CreditCard, Moon, RefreshCw, Settings2, ShoppingCart, Sun, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Route, Router, Switch } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
@@ -129,6 +129,8 @@ function Home() {
   const [rub, setRub] = useState(100000);
   const [pyyplFixed, setPyyplFixed] = useState(0.5);
   const [pyyplPercent, setPyyplPercent] = useState(3.5);
+  const [pyyplCardFixed, setPyyplCardFixed] = useState(0);
+  const [pyyplCardPercent, setPyyplCardPercent] = useState(5);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<RatesResponse>({
     queryKey: ["/api/rates"],
@@ -147,8 +149,25 @@ function Home() {
     const minTopUpOk = usdBeforeFee >= 20;
     const rubForMinTopUp = mir > 0 && bnb > 0 && visa > 0 ? (20 / visa) * bnb / mir : 0;
 
-    return { byn, eur, usdBeforeFee, usdAfterFee, pyyplFee, minTopUpOk, rubForMinTopUp };
-  }, [data, pyyplFixed, pyyplPercent, rub]);
+    const usdToEurRate = visa > 0 ? 1 / visa : 0;
+    const pyyplCardFeeUsd = Math.max(0, usdAfterFee * (pyyplCardPercent / 100) + pyyplCardFixed);
+    const usdAvailableForFx = Math.max(0, usdAfterFee - pyyplCardFeeUsd);
+    const eurFinal = usdAvailableForFx * usdToEurRate;
+
+    return {
+      byn,
+      eur,
+      usdBeforeFee,
+      usdAfterFee,
+      pyyplFee,
+      minTopUpOk,
+      rubForMinTopUp,
+      usdToEurRate,
+      pyyplCardFeeUsd,
+      usdAvailableForFx,
+      eurFinal,
+    };
+  }, [data, pyyplFixed, pyyplPercent, pyyplCardFixed, pyyplCardPercent, rub]);
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -235,6 +254,43 @@ function Home() {
                 </div>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
                   Load from Debit Card: USD 0.50 + 3.5%. Минимальное пополнение Pyypl: 20 USD без учёта комиссии.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="pyypl-card-fixed">Pyypl card fixed, USD</Label>
+                  <Input
+                    id="pyypl-card-fixed"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={pyyplCardFixed}
+                    onChange={(event) => setPyyplCardFixed(Number(event.target.value || 0))}
+                    data-testid="input-pyypl-card-fixed"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pyypl-card-percent">Pyypl card percent, %</Label>
+                  <Input
+                    id="pyypl-card-percent"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={pyyplCardPercent}
+                    onChange={(event) => setPyyplCardPercent(Number(event.target.value || 0))}
+                    data-testid="input-pyypl-card-percent"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/40 p-4">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Settings2 className="h-4 w-4 text-primary" />
+                  Предустановка Pyypl card transaction
+                </div>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  International/Local Purchase: USD 0.00 + 5%. Применяется к покупкам/транзакциям по карте Pyypl в Сценарии 3.
                 </p>
               </div>
 
@@ -326,6 +382,50 @@ function Home() {
                   ? "Минимум Pyypl 20 USD до комиссии выполнен."
                   : `Минимум Pyypl не выполнен. При текущих курсах нужно примерно ${fmt(calc.rubForMinTopUp, "RUB", 0)} на старте.`}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-card-border">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <ShoppingCart className="h-5 w-5 text-primary" />
+                <CardTitle className="text-lg">Сценарий 3: RUB → EUR transaction через Pyypl</CardTitle>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Оплата покупки в EUR с кошелька Pyypl (USD). Применяется комиссия card transaction Pyypl и обратный курс USD → EUR (инверсия Visa EUR → USD).
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-xl bg-primary p-5 text-primary-foreground">
+                <div className="text-sm opacity-80">Итог EUR-покупки с Pyypl</div>
+                <div className="mt-2 font-mono text-3xl font-bold tabular-nums" data-testid="text-result-eur-final">
+                  {fmt(calc.eurFinal, "EUR")}
+                </div>
+              </div>
+
+              <StepRow
+                title="USD на Pyypl после top up"
+                value={fmt(calc.usdAfterFee, "USD")}
+                detail={`Результат Сценария 2 после комиссии ${pyyplPercent}% + ${fmt(pyyplFixed, "USD")}`}
+              />
+              <ArrowDown className="mx-auto h-4 w-4 text-muted-foreground" />
+              <StepRow
+                title="Pyypl card transaction fee"
+                value={`−${fmt(calc.pyyplCardFeeUsd, "USD")}`}
+                detail={`${pyyplCardPercent}% + ${fmt(pyyplCardFixed, "USD")} от суммы транзакции`}
+              />
+              <ArrowDown className="mx-auto h-4 w-4 text-muted-foreground" />
+              <StepRow
+                title="USD доступно для FX"
+                value={fmt(calc.usdAvailableForFx, "USD")}
+                detail="USD Pyypl после card transaction fee"
+              />
+              <ArrowDown className="mx-auto h-4 w-4 text-muted-foreground" />
+              <StepRow
+                title="USD → EUR (инверсия Visa)"
+                value={fmt(calc.eurFinal, "EUR")}
+                detail={`${fmt(calc.usdAvailableForFx, "USD")} × ${num(calc.usdToEurRate, 6)} (= 1 / ${num(data?.rates.visaEurToUsd.rate ?? 0, 6)})`}
+              />
             </CardContent>
           </Card>
 
